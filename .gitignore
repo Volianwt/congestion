@@ -1,0 +1,6 @@
+data/raw/
+data/derived/
+*.parquet
+data/raw/
+data/derived/
+*.parquet
