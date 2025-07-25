@@ -143,6 +143,88 @@ st.plotly_chart(fig2, use_container_width=True)
 # --------------------------------------
 
 
+# -------- Map view --------
+st.header("Map view (CI by location)")
+
+if {"latitude", "longitude"}.issubset(df.columns):
+
+    unique_hours = sub["hour"].dt.floor("h").unique()
+    if len(unique_hours) == 0:
+        st.info("No geo‑tagged data for this period.")
+    else:
+        hour_labels = [ts.strftime("%Y‑%m‑%d %H:%M") for ts in unique_hours]
+        idx = st.slider("Choose hour to display",
+                        min_value=0, max_value=len(unique_hours)-1,
+                        value=len(unique_hours)-1,
+                        format="%d")
+        chosen_hour = unique_hours[idx]
+        st.caption(f"Showing **{hour_labels[idx]} UTC**")
+
+        # >>> CHANGE HERE: use df not sub to see every sensor
+        map_df = df[df["hour"].dt.floor("h") == chosen_hour].copy()
+
+        color_map = {"low": [31,119,180,160],
+                     "normal": [46,160,67,160],
+                     "high": [214,39,40,160],
+                     "unknown": [127,127,127,160]}
+        map_df["color"] = map_df["ci_level"].map(color_map)
+
+        import pydeck as pdk
+        layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=map_df,
+            get_position="[longitude, latitude]",
+            get_radius=100,
+            get_fill_color="color",
+            pickable=True,
+        )
+        view_state = pdk.ViewState(latitude=map_df["latitude"].mean(),
+                                   longitude=map_df["longitude"].mean(),
+                                   zoom=11)
+        tooltip = {"html": "<b>{location_name}</b><br>CI: {ci:.2f}<br>Vol: {volume_hour}"}
+        st.pydeck_chart(pdk.Deck(layers=[layer],
+                                 initial_view_state=view_state,
+                                 tooltip=tooltip))
+else:
+    st.info("Latitude/longitude not found in dataframe — cannot draw map.")
+# --------------------------
+
+# -------------------- WEEKDAY × HOUR HEATMAP --------------------
+import plotly.express as px
+import numpy as np
+
+st.header("Weekly pattern heatmap")
+
+# 1) 先按星期几（0=Mon）固定排序
+ordered_weekdays = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+heat_df = sub.copy()
+heat_df["weekday"] = pd.Categorical(
+    heat_df["hour"].dt.day_name(), categories=ordered_weekdays, ordered=True)
+heat_df["hod"] = heat_df["hour"].dt.hour
+
+# 2) 计算这个选定地点/日期范围内，weekday×hour 的 CI 均值
+pivot = (heat_df
+         .pivot_table(index="weekday", columns="hod", values="ci", aggfunc="mean")
+         .reindex(ordered_weekdays))
+
+# 3) 画图
+fig_hm = px.imshow(
+    pivot,
+    aspect="auto",
+    color_continuous_scale="RdYlGn_r",  # 红=高 CI
+    labels=dict(x="Hour of day", y="Weekday", color="Avg CI"),
+    title="Average CI by Weekday × Hour"
+)
+
+# 阈值参考线（可选）
+fig_hm.add_shape(type="line", y0=0, y1=6.9, x0=8, x1=8, line=dict(color="white", dash="dot", width=0.5))
+fig_hm.add_shape(type="line", y0=0, y1=6.9, x0=17, x1=17, line=dict(color="white", dash="dot", width=0.5))
+
+st.plotly_chart(fig_hm, use_container_width=True)
+# ----------------------------------------------------------------
+
+
+
 with st.expander("Raw data preview"):
     st.dataframe(sub.head(200))
 

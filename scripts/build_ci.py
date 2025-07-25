@@ -7,14 +7,20 @@ from src.metrics import compute_hourly_baseline, attach_ci, save_parquet, attach
 import pandas as pd
 import numpy as np
 
-# 1. load raw 15-min volume and aggregate to hourly
-veh = load_volume()  # has 'hour' and 'volume_15min'
+# 1. load raw 15‑min volume and aggregate to hourly
+veh = load_volume()  # has columns: location_name, hour, volume_15min, latitude, longitude
 
-hourly = (
-    veh.groupby(["location_name", "hour"], as_index=False)["volume_15min"]
-       .sum()
-       .rename(columns={"volume_15min": "volume_hour"})
-)
+hourly = (veh
+          .groupby(["location_name", "hour"], as_index=False)["volume_15min"]
+          .sum()
+          .rename(columns={"volume_15min": "volume_hour"}))
+
+# --> 保留经纬度：先取每个 location_name 的第一次坐标
+coords = (veh[["location_name", "latitude", "longitude"]]
+          .drop_duplicates("location_name"))
+
+hourly = hourly.merge(coords, on="location_name", how="left")
+
 
 # 2. baseline (weekday-hour)
 baseline = compute_hourly_baseline(hourly,
@@ -62,4 +68,3 @@ with_ci["ci_level"] = with_ci["ci"].apply(_classify_ci)
 # 4. save
 save_parquet(with_ci, "vehicle_ci")
 print("Done. Rows:", len(with_ci))
-

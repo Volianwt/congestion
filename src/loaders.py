@@ -129,4 +129,3 @@ def load_google_mobility(path: Path | None = None, country_code: str = "CA") -> 
     if "country_region_code" in df.columns:
         df = df[df["country_region_code"] == country_code]
     return df
-
